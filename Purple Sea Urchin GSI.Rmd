@@ -1,0 +1,79 @@
+---
+title: "Purple Sea Urchin GSI & Protein"
+author: "Sophia Cabral"
+date: "2026-01-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+
+pGSI_data <- read.csv("purplegsi.csv")
+pGSI_data <- pGSI_data %>%
+  mutate(date = as.Date(date,format = "%m/%d/%Y"))
+
+pGSI_data <- pGSI_data %>%
+  mutate(month = as.Date(format(date, "%Y-%m-01")))
+```
+
+```{r GSI, include=TRUE}
+
+GSI_plot <- ggplot(pGSI_data, aes(x = month, y = gsi_., fill = site, group = interaction(month, site))) +
+  geom_boxplot(position = position_dodge(width = 25), outlier.alpha = 0.7 ) +
+  labs(y = "Gonadosomatic Index (%)", x = "Collection Month", fill = "Site") +
+  #ggtitle("Arroyo Quemado Reef and Mohawk Reef GSI") +
+  scale_y_continuous(limits = c(0, 30)) +
+  scale_fill_manual(values = c("#DBDBDB", "#818589"),
+                    name = "Site",
+                    labels = c("Arroyo Quemado Reef", "Mohawk Reef")) +
+  scale_x_date(
+    labels = function(x) format(x, "%b %Y"),
+    breaks = seq(min(pGSI_data$month), max(pGSI_data$month), by = "3 month")
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "gray", linewidth = 0.5),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "black"),
+    plot.title = element_text(hjust = 0.5, size = 14, margin = margin(b = 20)),
+    axis.text.x = element_text(angle = 35, hjust = 1)
+  )
+
+print(GSI_plot)
+#ggsave("Purple urchin GSI.jpg", GSI_plot, width = 16, height = 6)
+```
+
+```{r ARQ GSI only, include=TRUE}
+
+pGSI_data_filtered <- pGSI_data %>%
+  filter(site == "ARQ")
+
+purpleARQ_GSI_plot <- ggplot(pGSI_data_filtered, aes(x = month, y = gsi_., fill = site, group = interaction(month, site))) +
+  geom_boxplot(position = position_dodge(width = 25), outlier.alpha = 0.7 ) +
+  labs(y = "Gonadosomatic Index (%)", x = "Collection Month", fill = "Site") +
+  #ggtitle("Arroyo Quemado Reef  GSI") +
+  scale_y_continuous(limits = c(0, 30)) +
+  scale_fill_manual(values = c("#DBDBDB"),
+                    name = "Site",
+                    labels = c("Arroyo Quemado Reef")) +
+  scale_x_date(
+    labels = function(x) format(x, "%b %Y"),
+    breaks = seq(min(pGSI_data$month), max(pGSI_data$month), by = "3 month")
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "gray", linewidth = 0.5),
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "black"),
+    plot.title = element_text(hjust = 0.5, size = 14, margin = margin(b = 20)),
+    axis.text.x = element_text(angle = 35, hjust = 1)
+  )
+
+print(purpleARQ_GSI_plot)
+#ggsave("ARQ GSI.png", purpleARQ_GSI_plot, width = 18, height = 6)
+```

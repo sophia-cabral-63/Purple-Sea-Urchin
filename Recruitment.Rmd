@@ -1,0 +1,561 @@
+---
+title: "Larval Recruitment"
+author: "Sophia Cabral - from Sam Bogan"
+date: "2026-01-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Set knitr options
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+Read in and wrangle temperature data
+
+```{r temp data}
+# Read in ARQ temp data
+library(lubridate)
+library(tidyverse)
+library(brms)
+library(Rmisc)
+library(bayestestR)
+library(ggplot2)
+
+# Read in SBC temperature datasets
+ARQ_CTD_df <- read.csv("arroyoquemado_mooring_arq_20250117.csv")
+ALE_CTD_df <- read.csv("alegria_mooring_ale_20210617.csv")
+NAP_CTD_df <- read.csv("naples_mooring_nap_20250117.csv")
+MKO_CTD_df <- read.csv("mohawk_mooring_mko_20250117.csv")
+#SBH_CTD_df <- read.csv("sternswharf_mooring_sbh_20210303.csv")
+CAR_CTD_df <- read.csv("carpinteria_mooring_car_20250117.csv")
+
+# Extract relevant columns according to SBC-LTER data description
+ARQ_CTD_temp <- ARQ_CTD_df %>% select(1,2,3,4,5,54,55,56,57)
+ALE_CTD_temp <- ALE_CTD_df %>% select(1,2,3,4,5,54,55,56,57)
+NAP_CTD_temp <- NAP_CTD_df %>% select(1,2,3,4,5,54,55,56,57)
+MKO_CTD_temp <- MKO_CTD_df %>% select(1,2,3,4,5,54,55,56,57)
+#SBH_CTD_temp <- SBH_CTD_df %>% select(1,2,3,4,5,54,55,56,57)
+CAR_CTD_temp <- CAR_CTD_df %>% select(1,2,3,4,5,54,55,56,57)
+
+# Name kept columns according to SBC-LTER data description
+colnames(ARQ_CTD_temp) <- c("Date_time", "Year", "Month", "Day", "Frac_day",
+                            "Temp_adcp", "Temp_top", "Temp_mid", "Temp_bot")
+colnames(ALE_CTD_temp) <- c("Date_time", "Year", "Month", "Day", "Frac_day",
+                            "Temp_adcp", "Temp_top", "Temp_mid", "Temp_bot")
+colnames(NAP_CTD_temp) <- c("Date_time", "Year", "Month", "Day", "Frac_day",
+                            "Temp_adcp", "Temp_top", "Temp_mid", "Temp_bot")
+colnames(MKO_CTD_temp) <- c("Date_time", "Year", "Month", "Day", "Frac_day",
+                            "Temp_adcp", "Temp_top", "Temp_mid", "Temp_bot")
+#colnames(SBH_CTD_temp) <- c("Date_time", "Year", "Month", "Day", "Frac_day",
+                            #"Temp_adcp", "Temp_top", "Temp_mid", "Temp_bot")
+colnames(CAR_CTD_temp) <- c("Date_time", "Year", "Month", "Day", "Frac_day",
+                            "Temp_adcp", "Temp_top", "Temp_mid", "Temp_bot")
+
+# Create year-month-day date variable
+ARQ_CTD_temp$Date <- as.Date(paste(ARQ_CTD_temp$Year,
+                           ARQ_CTD_temp$Month,
+                           ARQ_CTD_temp$Day,
+                           sep = "-"))
+ALE_CTD_temp$Date <- as.Date(paste(ALE_CTD_temp$Year,
+                           ALE_CTD_temp$Month,
+                           ALE_CTD_temp$Day,
+                           sep = "-"))
+NAP_CTD_temp$Date <- as.Date(paste(NAP_CTD_temp$Year,
+                           NAP_CTD_temp$Month,
+                           NAP_CTD_temp$Day,
+                           sep = "-"))
+MKO_CTD_temp$Date <- as.Date(paste(MKO_CTD_temp$Year,
+                           MKO_CTD_temp$Month,
+                           MKO_CTD_temp$Day,
+                           sep = "-"))
+#SBH_CTD_temp$Date <- as.Date(paste(SBH_CTD_temp$Year,
+                           #SBH_CTD_temp$Month,
+                           #SBH_CTD_temp$Day,
+                           #sep = "-"))
+CAR_CTD_temp$Date <- as.Date(paste(CAR_CTD_temp$Year,
+                           CAR_CTD_temp$Month,
+                           CAR_CTD_temp$Day,
+                           sep = "-"))
+
+# Remove artificial "9999" values for surface temp measurements
+ARQ_CTD_temp <- filter(ARQ_CTD_temp, Temp_top < 200)
+ALE_CTD_temp <- filter(ALE_CTD_temp, Temp_top < 200)
+NAP_CTD_temp <- filter(NAP_CTD_temp, Temp_top < 200)
+MKO_CTD_temp <- filter(MKO_CTD_temp, Temp_top < 200)
+#SBH_CTD_temp <- filter(SBH_CTD_temp, Temp_top < 200)
+CAR_CTD_temp <- filter(CAR_CTD_temp, Temp_top < 200)
+
+# Add site variable to each df
+ARQ_CTD_temp$Site <- "ARQ"
+ALE_CTD_temp$Site <- "ALE"
+NAP_CTD_temp$Site <- "NAP"
+MKO_CTD_temp$Site <- "MKO"
+#SBH_CTD_temp$Site <- "SBH"
+CAR_CTD_temp$Site <- "CAR"
+
+# Merge temps from all sites
+all_sites_temp <- rbind(ARQ_CTD_temp,
+      ALE_CTD_temp,
+      NAP_CTD_temp,
+      MKO_CTD_temp,
+      CAR_CTD_temp)
+
+# Calculate daily mean temp
+all_sites_temp$Month_Yr <- format(as.Date(all_sites_temp$Date), "%Y-%m")
+ARQ_CTD_temp_top_mean <- summarySE(data = all_sites_temp,
+                                   measurevar = "Temp_top",
+                                   groupvars = c("Month_Yr"))
+
+# Simplify syntax of Month and Year variables
+ARQ_CTD_temp_top_mean$Month <- as.numeric(gsub(".*-", "", ARQ_CTD_temp_top_mean$Month_Yr))
+ARQ_CTD_temp_top_mean$Year <- as.numeric(gsub("-.*", "", ARQ_CTD_temp_top_mean$Month_Yr))
+
+```
+
+
+```{r red urchin settlement data}
+
+# Read in settlement data
+recruitment_df <- read.csv("Invertebrate_Settlement_All_Years_20250812.csv")
+
+str(recruitment_df$DATE_DEPLOYED)
+head(recruitment_df$DATE_DEPLOYED, 10)
+
+# Correct date variables
+recruitment_df$DATE_DEPLOYED <- ymd(recruitment_df$DATE_DEPLOYED)
+recruitment_df$Date <- ymd(recruitment_df$DATE_RETRIEVED)
+
+# Remove artificial "-9999" vaues from recruitment data
+recruitment_df <- filter(recruitment_df, M_FRANCISCANUS >= 0)
+
+## Merge mean temps with settlement data
+# First, create a 'Year_Month' variable so that you can connect settlement data with temp data
+recruitment_df$Month_Yr <- format(as.Date(recruitment_df$Date), "%Y-%m")
+recruitment_df$Year <- as.numeric(gsub("-.*", "", recruitment_df$Month_Yr))
+
+recruitment_df <- recruitment_df %>%
+  filter(Year != 2020)
+
+# Normalize settlement counts
+recruitment_df$MK_norm <- (recruitment_df$M_FRANCISCANUS/recruitment_df$DURATION)
+
+# Estimate avg, normalized settlement per month
+MK_mean_recr <- summarySE(data = recruitment_df,
+                             measurevar = "MK_norm",
+                             groupvars = c("Month_Yr", "SITE"))
+
+# Finally, merge temp and recruitment data
+settlement_by_temp_MK <- merge(MK_mean_recr, ARQ_CTD_temp_top_mean,  by = "Month_Yr")
+
+# Plot time series and distributions of settlement rate, grouped by species
+species_recr_df <- filter(rbind(data.frame(Species = "Spur",
+                                    Retrieval = as.Date(recruitment_df$DATE_RETRIEVED),
+                                    Recr_rate = recruitment_df$S_PURPURATUS/recruitment_df$DURATION),
+                         data.frame(Species = "Mfran",
+                                    Retrieval = as.Date(recruitment_df$DATE_RETRIEVED),
+                                    Recr_rate = recruitment_df$M_FRANCISCANUS/recruitment_df$DURATION)),
+                         Recr_rate > -6000)
+
+# Plot a comparison of Spurp and Mfran settlement
+settlement <- ggplot(data = species_recr_df,
+       aes(x = Retrieval, y = Recr_rate, color = Species, fill = Species)) +
+  geom_point(size = .5) +
+  scale_color_manual(values = c("Purple", "Red")) +
+  scale_fill_manual(values = c("Purple", "Red")) +
+  theme_classic(base_size = 12) +
+  scale_y_continuous(lim = c(0, 15)) +
+  theme(legend.position = "none") +
+  labs(y = "Recruitment / day / brush", x = "Date")
+
+ggsave("Settlement Data.png", settlement, width = 10, height = 6)
+
+# Sum total recruitment
+recr_year <- aggregate(recruitment_df$M_FRANCISCANUS, 
+                       by=list(Year=recruitment_df$Year,
+                               Site = recruitment_df$SITE), FUN=sum)
+
+# Create year_site indexes
+recr_year$Year_Site <- paste(recr_year$Year,
+                             recr_year$Site,
+                             sep="_")
+
+settlement_by_temp_MK$Year_Site <- paste(settlement_by_temp_MK$Year,
+                             settlement_by_temp_MK$SITE,
+                             sep="_")
+
+# Merge settlement rate and total annual settlement data
+settlement_by_temp_MK <- merge(settlement_by_temp_MK, 
+                            data.frame(year_recr = recr_year$x,
+                                       Year_Site = recr_year$Year_Site), 
+                            by = "Year_Site")
+
+# For modeling, calculate variable Z-scores to improve model speed and convergence
+settlement_by_temp_MK$Temp_top_Z <- scale(settlement_by_temp_MK$Temp_top)
+settlement_by_temp_MK$Temp_top2_Z <- scale(settlement_by_temp_MK$Temp_top^2)
+settlement_by_temp_MK$year_recr_Z <- scale(settlement_by_temp_MK$year_recr)
+settlement_by_temp_MK$Month_2 <- settlement_by_temp_MK$Month^2
+settlement_by_temp_MK$Month_3 <- settlement_by_temp_MK$Month^3
+settlement_by_temp_MK$recr_rate <- settlement_by_temp_MK$MK_norm / settlement_by_temp_MK$year_recr
+settlement_by_temp_MK$MK_norm_Z <- scale(settlement_by_temp_MK$recr_rate)
+
+# Filter data for SBC sites only
+settlement_by_temp_mf_filt <- filter(settlement_by_temp_MK, SITE == "GAVIOTA" |
+                                       SITE == "ANACAPA"|
+                                       SITE == "SBELL" |
+                                       SITE == "SBSTWRF")
+
+```
+
+Repeat as above for S. purpuratus 
+
+```{r purp}
+# Read in settlement data; filter for S. purpuratus
+#recruitment_df <- read.csv("Invertebrate_Settlement_All_Years_20250812.csv")
+
+#recruitment_df$DATE_DEPLOYED <- mdy(recruitment_df$DATE_DEPLOYED)
+
+#recruitment_df$Date <- ymd(recruitment_df$DATE_RETRIEVED)
+
+sp_recruitment_df <- filter(recruitment_df, S_PURPURATUS >=0)
+
+# Merge mean temps with settlement data
+sp_recruitment_df$Month_Yr <- format(as.Date(sp_recruitment_df$Date), "%Y-%m")
+
+sp_recruitment_df$spur_norm <- (sp_recruitment_df$S_PURPURATUS/sp_recruitment_df$DURATION)
+
+Spurp_mean_recr <- summarySE(data = sp_recruitment_df,
+                             measurevar = "spur_norm",
+                             groupvars = c("Month_Yr", "SITE"))
+
+settlement_by_temp_sp <- merge(Spurp_mean_recr, ARQ_CTD_temp_top_mean,  by = "Month_Yr")
+recruitment_df$Month_Yr <- format(as.Date(recruitment_df$Date), "%Y-%m")
+recruitment_df$Year <- as.numeric(gsub("-.*", "", recruitment_df$Month_Yr))
+
+
+# Plot recruitment rates  normalized by how much total recruitment occurred that year
+recruitment_df <- filter(recruitment_df, S_PURPURATUS < 9999 &
+                           S_PURPURATUS > -9999)
+
+# Sum total recruitment
+recr_year <- aggregate(recruitment_df$S_PURPURATUS, 
+                       by=list(Year = (recruitment_df$Year),
+                               Site = recruitment_df$SITE), FUN=sum)
+
+# Create year_site indexes
+recr_year$Year_Site <- paste(recr_year$Year,
+                             recr_year$Site,
+                             sep="_")
+
+settlement_by_temp_sp$Year_Site <- paste(settlement_by_temp_sp$Year,
+                             settlement_by_temp_sp$SITE,
+                             sep="_")
+
+# Merge settlement rate and total annual settlement data
+settlement_by_temp_sp <- merge(settlement_by_temp_sp, 
+                            data.frame(year_recr = recr_year$x,
+                                       Year_Site = recr_year$Year_Site), 
+                            by = "Year_Site")
+
+# Calculate Z-scores to improve model speed and convergence
+settlement_by_temp_sp$Temp_top_Z <- scale(settlement_by_temp_sp$Temp_top)
+settlement_by_temp_sp$Temp_top2_Z <- scale(settlement_by_temp_sp$Temp_top^2)
+settlement_by_temp_sp$year_recr_Z <- scale(settlement_by_temp_sp$year_recr)
+settlement_by_temp_sp$Month_2 <- settlement_by_temp_sp$Month^2
+settlement_by_temp_sp$recr_rate <- settlement_by_temp_sp$spur_norm / settlement_by_temp_sp$year_recr
+settlement_by_temp_sp <- filter(settlement_by_temp_sp, recr_rate < Inf & recr_rate > -Inf)
+settlement_by_temp_sp$spur_norm_Z <- scale(settlement_by_temp_sp$recr_rate)
+
+#Filter for Santa Barbara sites
+settlement_by_temp_sp_filt <- filter(settlement_by_temp_sp, SITE == "GAVIOTA" |
+                                       SITE == "ANACAPA"|
+                                       SITE == "SBELL" |
+                                       SITE == "SBSTWRF")
+
+
+```
+
+Merge wrangled Spurp and Mfran dataframes
+
+```{r}
+
+# Set species as a pecies as a factor in Spurp and Mfran datasets
+settlement_by_temp_sp_filt$Species <- "S_purpuratus"
+settlement_by_temp_mf_filt$Species <- "M_franciscanus"
+
+# Merge Spurp and Mfran dataframes
+settlement_by_temp_species_filt <- rbind(data.frame(Species = settlement_by_temp_sp_filt$Species,
+                                                    Site = as.factor(settlement_by_temp_sp_filt$SITE),
+                                                    Month = settlement_by_temp_sp_filt$Month,
+                                                    Month_2 = settlement_by_temp_sp_filt$Month_2,
+                                                    Year = settlement_by_temp_sp_filt$Year,
+                                                    Temp_top_Z = settlement_by_temp_sp_filt$Temp_top_Z,
+                                                    spur_norm_Z = settlement_by_temp_sp_filt$spur_norm_Z,
+                                                    spur_norm = settlement_by_temp_sp_filt$spur_norm),
+                                         data.frame(Species = settlement_by_temp_mf_filt$Species,
+                                                    Site = as.factor(settlement_by_temp_mf_filt$SITE),
+                                                    Month = settlement_by_temp_mf_filt$Month,
+                                                    Month_2 = settlement_by_temp_mf_filt$Month_2,
+                                                    Year = settlement_by_temp_mf_filt$Year,
+                                                    Temp_top_Z = settlement_by_temp_mf_filt$Temp_top_Z,
+                                                    spur_norm_Z = settlement_by_temp_mf_filt$MK_norm_Z,
+                                                    spur_norm = settlement_by_temp_mf_filt$MK_norm))
+
+# Scale time variables and add in a third order polynomial for month
+settlement_by_temp_species_filt$Month_Z <- scale(settlement_by_temp_species_filt$Month)
+settlement_by_temp_species_filt$Month_2_Z <- scale(settlement_by_temp_species_filt$Month_2)
+settlement_by_temp_species_filt$Year_Z <- scale(settlement_by_temp_species_filt$Year)
+settlement_by_temp_species_filt$Month_3_Z <- scale(settlement_by_temp_species_filt$Month^3)
+
+# Make a factor variable for year
+settlement_by_temp_species_filt$Year_fctr <- as.factor(settlement_by_temp_species_filt$Year)
+
+# Once again, filter your df down to SB sites
+settlement_by_temp_species_filt <- filter(settlement_by_temp_species_filt, 
+                                          Site == "GAVIOTA" |
+                                          Site == "ANACAPA"|
+                                          Site == "SBELL" |
+                                          Site == "SBSTWRF")
+
+# In order to fit Weibull distribution, estimate proportional recruitment rates and add 1 to each value
+purp_df <- filter(settlement_by_temp_species_filt, Species == "S_purpuratus")
+red_df <- filter(settlement_by_temp_species_filt, Species == "M_franciscanus")
+
+summed_recr_purp <- sum(purp_df$spur_norm)
+summed_recr_red <- sum(red_df$spur_norm)
+
+settlement_by_temp_species_filt$prop_recr <- ifelse(settlement_by_temp_species_filt$Species == "S_purpuratus",
+                                      (settlement_by_temp_species_filt$spur_norm / summed_recr_purp),
+                                      (settlement_by_temp_species_filt$spur_norm / summed_recr_red))
+
+settlement_by_temp_species_filt$spur_plus_1 <- (1 + settlement_by_temp_species_filt$prop_recr)
+
+
+# To ensure that this worked, double check that variance of proportional recruitment rates is equal between species
+ggplot(data = settlement_by_temp_species_filt, aes( x = Species, y = spur_plus_1)) +
+  geom_jitter() +
+  theme_classic()
+
+# Merge input data with site coordinates
+lat_lon_index <- data.frame(Site = c("ANACAPA",
+                                     "GAVIOTA",
+                                     "SBELL",
+                                     "SBSTWRF"),
+                            Lat = c(34.01681,
+                                    34.46978,
+                                    34.43085,
+                                    34.40934),
+                            Long = c(-119.362097,
+                                     -120.22821,
+                                     -119.92408,
+                                     -119.68493))
+
+
+settlement_by_temp_species_filt <- merge(settlement_by_temp_species_filt,
+                                         lat_lon_index,
+                                         by = "Site")
+
+```
+
+Fit Bayesian, spatial models for temperature's effect on species' recruitment over time
+
+```{r, eval = FALSE}
+
+######################################################################################################################################
+######################################################## DO NOT RUN THIS CHUNK AFTER RUNNING ONCE ########################################################
+######################################################################################################################################
+
+# Fit Bayesian model using brms
+recr_brm_spat_WSN <- brm(spur_plus_1 ~ Month_Z + Month_2_Z + Month_3_Z + Temp_top_Z + Year_fctr + # Fit singular effects
+                           Year_Z:Temp_top_Z:Species + #Fit interactive effect 
+                           gp(Lat, Long), # Fit spatial distance matrix as random variable
+                         data = settlement_by_temp_species_filt,
+                         family = weibull(), # Use Weibull distribution to accomodate zero inflation of data
+                         prior = c(prior(normal(0, 10), class = Intercept), # Set weak intercept prior
+                                   prior(normal(0, 10), class = b)), # Set weak intercept prior
+                         cores = 2, # Use two computer cores because this model takes a while
+                         iter = 10000) # Currently using 10k iterations for the sake of time
+# Save brm output
+save(recr_brm_spat_WSN, file = "recr_brm_spat_WSN.RData")
+
+## Model lag effect of temperature
+#year_temp_mean <- summarySE(measurevar = "Temp_top_Z",
+#                            groupvars = c("Year_fctr"),
+#                            data = settlement_by_temp_species_filt)
+
+#names(year_temp_mean)[3] <- "Year_avg_temp_Z"
+
+#settlement_by_temp_species_filt_avg <- merge(settlement_by_temp_species_filt,
+#                                         data.frame(Year_fctr = as.factor((as.numeric(year_temp_mean$Year_fctr) - 1)),
+#                                                    Year_avg_temp_Z = year_temp_mean$Year_avg_temp_Z),
+#                                         by = "Year_fctr")
+
+#recr_brm_spat_lag <- brm(spur_plus_1 ~ Month_Z + Month_2_Z + Month_3_Z + Temp_top_Z + Year_fctr + 
+#                           Year_avg_temp_Z:Temp_top_Z:Species + #Fit interactive effect 
+#                           gp(Lat, Long), # Fit spatial distance matrix as random variable
+#                         data = settlement_by_temp_species_filt_avg,
+#                         family = weibull(), # Use Weibull distribution to accomodate zero inflation of data
+#                         prior = c(prior(normal(0, 10), class = Intercept), # Set weak intercept prior
+#                                   prior(normal(0, 10), class = b)), # Set weak intercept prior
+#                         cores = 2, # Use two computer cores because this model takes a while
+#                         iter = 10000) # Currently using 10k iterations for the sake of time
+
+```
+
+Plot and evaluate model predictions
+
+```{r}
+
+# Load brm output
+load("recr_brm_spat_WSN.RData")
+
+# Check posterior
+posterior_interval(
+  recr_brm_spat,
+  prob = 0.95,
+  type = "central")
+
+# Plot posteriors
+plot(recr_brm_spat)
+
+# Predict species level model values
+p_species_brm_st5 <- predict(recr_brm_spat,
+                             newdata = settlement_by_temp_species_filt) %>%
+  as_tibble() %>%
+  bind_cols(settlement_by_temp_species_filt)
+
+# Estimate effects of temp on scaled recruitment
+p_species_brm_st5$Year <- as.factor(p_species_brm_st5$Year)
+models_by_year_species <- dlply(p_species_brm_st5, c("Year", "Species"), function(df) 
+lm(Estimate ~ Temp_top_Z, data = df))
+
+# Apply coef to each model and return a data frame
+models_by_year_coeff_species <- ldply(models_by_year_species, coef)
+
+models_by_year_coeff_species <- models_by_year_coeff_species[,!names(models_by_year_coeff_species) == "(Intercept)"]
+
+models_by_year_species_results <- ldply(models_by_year_species, function(i)coef(summary(i)))
+
+names(models_by_year_species_results)[names(models_by_year_species_results) == "Std. Error"] <- "SE"
+
+# Remove intercept estimates
+toDelete <- seq(1, 76, 2)
+models_by_year_species_results <-  models_by_year_species_results[-toDelete, ]
+
+# Plot effect of time:temperature on recruitment. Use Sophia's code in the next chunk for the table - this graph below is Sam's and doesn't plot correctly 
+ggplot(data = models_by_year_species_results,
+       aes(x = as.numeric(as.character(Year)), y = Estimate, fill = Species, group = Species, color = Species)) +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 1, color = "grey") +
+  geom_ribbon(aes(ymin = Estimate - SE, ymax = Estimate + SE), color = NA, alpha = 0.5) +
+  geom_line(position = "identity", size = .75) +
+  geom_point(size = 2) +
+  theme_classic(base_size = 20, base_rect_size = 0) +
+  theme(legend.position = "none",
+        strip.text = element_blank()) +
+  scale_color_manual(values = c("red", "purple")) +
+  labs(y = "Temperature effect", x = "Year") +
+  facet_wrap(~Species) +
+  scale_fill_manual(values = c("red", "purple"))
+
+#here and below is fine
+require("scales")
+
+Recruitment <- ggplot(data = p_species_brm_st5, aes(x = Temp_top_Z, y = spur_plus_1, color = Species)) +
+  geom_point(size = .5,) +
+  geom_smooth(method = "lm", fullrange = TRUE) +
+  theme_classic(base_size = 20, base_rect_size = 0) +
+  theme(legend.position = "none") +
+  labs(y = "Proportion of recruitment", x = "Scaled monthly SST") +
+  facet_wrap(~Species) +
+  scale_color_manual(values = c("red", "purple")) +
+  coord_cartesian(ylim=c(1.0, NA)) +
+  theme(strip.text.x = element_blank())
+
+ggsave("Proportion of Recruitment.png", Recruitment, width = 10, height = 6)
+ 
+# Observed vs fitted plot
+Estimate <- ggplot(data = p_species_brm_st5, aes(y = Estimate, x = spur_plus_1, color = Species, group = Species)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+
+ggsave("Observed vs fitted.png", Estimate, width = 10, height = 6)
+
+# Posterior plot
+sp5_post_samples <- posterior_samples(recr_brm_spat, "^b")
+
+species_posts <- rbind(data.frame(Sample = sp5_post_samples$`b_Temp_top_Z:Year_Z:SpeciesS_purpuratus`,
+                                  Species = "Spurp"),
+                       data.frame(Sample = sp5_post_samples$`b_Temp_top_Z:Year_Z:SpeciesM_franciscanus`,
+                                  Species = "Mfran"))
+
+Adaptive <- ggplot(data = species_posts, aes(x = Sample, group = Species, fill = Species)) +
+         geom_density(alpha = 0.5, size = 1) +
+  scale_fill_manual(values = c("red", "purple")) +
+  geom_vline(xintercept = 0, lty = 2, size = 2) +
+  labs(x = "Interaction (SST:year)", y = "Density") +
+  annotate(geom = "text", x = .002, y = 1500, size = 8,
+             label = "Adaptive", 
+             color = "purple") +
+  annotate(geom = "text", x = -.0015, y = 1500, size = 8, 
+            label = "Maladaptive", 
+            color = "red") +
+  theme_classic(base_size = 20) +
+  theme(legend.position = "none") +
+  xlim(-0.0025,.00425)
+
+ggsave("Adaptivity.png", Adaptive, width = 10, height = 6)
+
+```
+
+Ignore everything below here!!! Current code I'm working on
+
+```{r, eval = FALSE}
+
+models_by_year_species_results <- ldply(models_by_year_species, function(m) {
+  as.data.frame(coef(summary(m))) %>%
+    rownames_to_column("term") %>%
+    filter(term == "Temp_top_Z")   # keep only the slope
+})
+
+names(models_by_year_species_results)[names(models_by_year_species_results) == "Std. Error"] <- "SE"
+
+table(models_by_year_species_results$Species, models_by_year_species_results$Year)
+
+Temp_effect_WSN <- ggplot(models_by_year_species_results,
+       aes(x = as.numeric(as.character(Year)),
+           y = Estimate,
+           fill = Species,
+           group = Species,
+           color = Species)) +
+  geom_hline(yintercept = 0, lty = 2, linewidth = 1, color = "grey") +
+  geom_ribbon(aes(ymin = Estimate - SE, ymax = Estimate + SE),
+              color = NA, alpha = 0.5) +
+  geom_line(size = .75) +
+  geom_point(size = 2) +
+  theme_classic(base_size = 20) +
+  theme(legend.position = "none",
+        strip.text = element_blank()) +
+  scale_color_manual(values = c("red", "purple")) +
+  scale_fill_manual(values = c("red", "purple")) +
+  labs(y = "Temperature effect", x = "Year") +
+  facet_wrap(~Species) + 
+  coord_cartesian(ylim = c(-0.005, 0.001))
+
+ggsave("Temperature Effect WSN Yearly.png", Temp_effect_WSN, width = 10, height = 6)
+
+ggplot(data = models_by_year_species_results,
+       aes(x = as.numeric(as.character(Year)), y = Estimate, fill = Species)) +
+  geom_hline(yintercept = 0, lty = 2, size = 1, color = "grey") +
+  geom_ribbon(aes(ymin = Estimate - SE, ymax = Estimate + SE), size = 1, alpha = 0.5) +
+  geom_line(position = "identity", color = "black", size = .75) +
+  geom_point(size = 2, color = "black") +
+  theme_classic(base_size = 20, base_rect_size = 0) +
+  theme(legend.position = "none",
+        strip.text = element_blank()) +
+  scale_color_viridis_c() +
+  labs(y = "Temperature effect", x = "Year") +
+  facet_wrap(~Species) +
+  scale_fill_manual(values = c("purple", "red"))
+
+```
